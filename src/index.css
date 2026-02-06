@@ -1,0 +1,51 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap");
+
+:root {
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  line-height: 1.45;
+  font-weight: 500;
+  color: #132620;
+  background-color: #f7f9f4;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-strong: rgba(255, 255, 255, 0.98);
+  --line: #d0d9d3;
+  --ink: #132620;
+  --ink-soft: #4f645c;
+  --brand: #0d8f68;
+  --brand-strong: #066647;
+  --warn: #ca4d1f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 10%, rgba(56, 197, 154, 0.23) 0%, transparent 35%),
+    radial-gradient(circle at 80% 15%, rgba(251, 172, 70, 0.2) 0%, transparent 40%),
+    linear-gradient(180deg, #f1f6ef 0%, #edf4ee 48%, #edf2f1 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Space Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
