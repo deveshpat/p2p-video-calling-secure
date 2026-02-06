@@ -60,6 +60,8 @@ function readNumber(value: unknown, fallback = 0): number {
 
 const STATS_INTERVAL_MS = 1_000;
 const CONNECTION_TIMEOUT_MS = 25_000;
+const ICE_GATHER_MAX_WAIT_MS = 1_500;
+const ICE_GATHER_SETTLE_MS = 250;
 const PROFILE_RECOVERY_ORDER = [
   QualityState.SD_480,
   QualityState.HD_720,
@@ -757,34 +759,67 @@ export class WebRtcCallManager {
     }
   }
 
-  private waitForIceGatheringComplete(timeoutMs = 5_000): Promise<void> {
+  private waitForIceGatheringComplete(timeoutMs = ICE_GATHER_MAX_WAIT_MS): Promise<void> {
     if (this.peerConnection.iceGatheringState === "complete") {
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-      const timeout = window.setTimeout(() => {
+      let settleTimer: number | null = null;
+      let done = false;
+
+      const finalize = () => {
+        if (done) {
+          return;
+        }
+        done = true;
         cleanup();
         resolve();
-      }, timeoutMs);
+      };
 
-      const listener = () => {
+      const timeout = window.setTimeout(finalize, timeoutMs);
+
+      const settleSoon = () => {
+        if (settleTimer !== null) {
+          clearTimeout(settleTimer);
+        }
+        settleTimer = window.setTimeout(finalize, ICE_GATHER_SETTLE_MS);
+      };
+
+      const gatheringListener = () => {
         if (this.peerConnection.iceGatheringState !== "complete") {
           return;
         }
-        cleanup();
-        resolve();
+        finalize();
+      };
+
+      const candidateListener = (event: RTCPeerConnectionIceEvent) => {
+        if (!event.candidate) {
+          finalize();
+          return;
+        }
+        settleSoon();
       };
 
       const cleanup = () => {
         clearTimeout(timeout);
+        if (settleTimer !== null) {
+          clearTimeout(settleTimer);
+          settleTimer = null;
+        }
         this.peerConnection.removeEventListener(
           "icegatheringstatechange",
-          listener,
+          gatheringListener,
         );
+        this.peerConnection.removeEventListener("icecandidate", candidateListener);
       };
 
-      this.peerConnection.addEventListener("icegatheringstatechange", listener);
+      this.peerConnection.addEventListener(
+        "icegatheringstatechange",
+        gatheringListener,
+      );
+      this.peerConnection.addEventListener("icecandidate", candidateListener);
+      settleSoon();
     });
   }
 }

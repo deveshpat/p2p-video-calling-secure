@@ -2,8 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
 import "./App.css";
 import { PacketShare } from "./components/PacketShare";
+import { QuickLinkCall } from "./components/QuickLinkCall";
 import { QrScanInput } from "./components/QrScanInput";
 import { getLocalMediaStream } from "./lib/media";
+import {
+  buildHashForQuick,
+  parseAppRouteFromHash,
+} from "./lib/quickRoute";
 import {
   createSignalEnvelope,
   decodeEnvelopeFromTransport,
@@ -164,6 +169,9 @@ function App(): JSX.Element {
   const [manager, setManager] = useState<WebRtcCallManager | null>(null);
   const [decryptFailureCount, setDecryptFailureCount] = useState(0);
   const [decryptCooldownUntil, setDecryptCooldownUntil] = useState(0);
+  const [appRoute, setAppRoute] = useState(() =>
+    parseAppRouteFromHash(window.location.hash),
+  );
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -193,6 +201,21 @@ function App(): JSX.Element {
       localStream?.getTracks().forEach((track) => track.stop());
     };
   }, [manager, localStream]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setAppRoute(parseAppRouteFromHash(window.location.hash));
+    };
+    window.addEventListener("hashchange", onHashChange);
+    if (!window.location.hash) {
+      window.location.hash = buildHashForQuick();
+    } else {
+      onHashChange();
+    }
+    return () => {
+      window.removeEventListener("hashchange", onHashChange);
+    };
+  }, []);
 
   const resetCallUi = () => {
     setHostPacketText("");
@@ -494,6 +517,27 @@ function App(): JSX.Element {
     setErrorState(null);
   };
 
+  const switchToQuickMode = () => {
+    const roomId = appRoute.mode === "quick" ? appRoute.roomId : null;
+    window.location.hash = buildHashForQuick(roomId);
+  };
+
+  const handleQuickRoomChange = (roomId: string | null) => {
+    window.location.hash = buildHashForQuick(roomId);
+  };
+
+  if (appRoute.mode === "quick") {
+    return (
+      <main className="app-shell">
+        <header className="hero meet-hero">
+          <h1>Meet-Style 1:1 Video Calling</h1>
+          <p>Start a secure link call in one click. No login required.</p>
+        </header>
+        <QuickLinkCall roomId={appRoute.roomId} onRoomChange={handleQuickRoomChange} />
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="hero">
@@ -501,6 +545,14 @@ function App(): JSX.Element {
         <p>
           Torrent-style manual connection. No signaling server, no relay server, no call backend.
         </p>
+        <div className="button-row mode-switch-row">
+          <button type="button" className="mode-pill active">
+            Advanced Packet Mode
+          </button>
+          <button type="button" className="mode-pill" onClick={switchToQuickMode}>
+            Simple Link Mode
+          </button>
+        </div>
       </header>
 
       <section className="panel">

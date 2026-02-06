@@ -7,27 +7,57 @@ export const targetMediaConstraints: MediaStreamConstraints = {
     autoGainControl: true,
   },
   video: {
-    width: { ideal: 1920, max: 1920 },
-    height: { ideal: 1080, max: 1080 },
-    frameRate: { ideal: 30, max: 30 },
+    facingMode: "user",
+    width: { ideal: 960, max: 1280 },
+    height: { ideal: 540, max: 720 },
+    frameRate: { ideal: 24, max: 30 },
   },
 };
+
+const fallbackMediaConstraints: MediaStreamConstraints[] = [
+  targetMediaConstraints,
+  {
+    audio: true,
+    video: {
+      facingMode: "user",
+      width: { ideal: 640, max: 1280 },
+      height: { ideal: 360, max: 720 },
+      frameRate: { ideal: 24, max: 30 },
+    },
+  },
+  {
+    audio: true,
+    video: true,
+  },
+];
+
+function isPermissionDeniedError(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")
+  );
+}
 
 export async function getLocalMediaStream(): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error(CallFailureCode.MEDIA_UNSUPPORTED);
   }
 
-  try {
-    return await navigator.mediaDevices.getUserMedia(targetMediaConstraints);
-  } catch (error) {
-    if (
-      error instanceof DOMException &&
-      (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")
-    ) {
-      throw new Error(CallFailureCode.DEVICE_DENIED, { cause: error });
+  let lastError: unknown = null;
+  for (const constraints of fallbackMediaConstraints) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        throw new Error(CallFailureCode.DEVICE_DENIED, { cause: error });
+      }
+      lastError = error;
     }
-
-    throw new Error(CallFailureCode.MEDIA_UNSUPPORTED, { cause: error });
   }
+
+  if (isPermissionDeniedError(lastError)) {
+    throw new Error(CallFailureCode.DEVICE_DENIED, { cause: lastError });
+  }
+
+  throw new Error(CallFailureCode.MEDIA_UNSUPPORTED, { cause: lastError });
 }

@@ -17,12 +17,20 @@ export default defineConfig({
       ],
     },
   },
-  webServer: {
-    command: "npm run dev -- --host 127.0.0.1 --port 4173",
-    port: 4173,
-    timeout: 120_000,
-    reuseExistingServer: true,
-  },
+  webServer: [
+    {
+      command: "PORT=8866 npm run backend:dev",
+      port: 8866,
+      timeout: 120_000,
+      reuseExistingServer: true,
+    },
+    {
+      command: "VITE_API_BASE_URL=http://127.0.0.1:8866 npm run dev -- --host 127.0.0.1 --port 4173",
+      port: 4173,
+      timeout: 120_000,
+      reuseExistingServer: true,
+    },
+  ],
   projects: [
     {
       name: "chromium",

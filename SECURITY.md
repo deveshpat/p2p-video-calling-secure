@@ -1,41 +1,43 @@
 # Security Guide
 
-This app is built to reduce attack surface, but no internet app can be guaranteed "non-hackable."
+No internet app is perfectly unhackable. This project applies practical security controls for a small 1:1 video app.
 
-## What is already protected in this app
+## Current protections
 
-- End-to-end encrypted signaling packets (`AES-GCM` + `PBKDF2` key derivation).
-- Envelope integrity binding so packet metadata tampering is detected.
-- Strict packet size and chunk limits to block oversized payload abuse.
-- Strict input validation for room code, passphrase, SDP, and ICE candidate fields.
-- Brute-force slowdown: repeated bad passphrase attempts trigger a temporary cooldown.
-- Chat and data channel message size limits to reduce injection and memory abuse risk.
-- Browser security policies in `index.html` (CSP, referrer policy, permissions policy).
-- No server-side call infrastructure (no signaling server, no TURN relay in this build).
+- Strict room id validation and bounded payload sizes
+- 1 host + 1 guest room limit
+- Room expiry (default 24 hours)
+- Rate limits for REST and WebSocket traffic
+- JSON body size caps and WebSocket max payload caps
+- Short-lived TURN credentials (when TURN shared secret is configured)
+- Browser policies in `index.html` (CSP, referrer policy, permissions policy)
+- Advanced packet mode encryption controls remain in this repo for the hidden route
 
-## Deployment host security checklist
+## Backend security checklist
 
-- Keep macOS fully updated.
-- Use FileVault full-disk encryption.
-- Turn on firewall.
-- Use a password manager and unique long passwords.
-- Use MFA on GitHub and any hosting account.
-- Keep Node, npm, and dependencies updated regularly.
-- Never store secrets in git history.
-- Review dependency advisories (`npm audit`) before releases.
+- Keep Node and dependencies patched
+- Use Fly secrets for `TURN_SHARED_SECRET` and other sensitive values
+- Lock down `CORS_ORIGINS` to your frontend URL
+- Set `FRONTEND_BASE_URL` correctly so generated links are trusted
+- Rotate TURN shared secret if compromise is suspected
 
-## User/network safety checklist
+## TURN relay checklist
 
-- Use strong one-time room codes.
-- Use strong one-time passphrases (14+ chars, mixed types).
-- Regenerate packets if any packet leaks.
-- Prefer trusted networks for calls.
-- Do not share packet text in public chats.
-- Export diagnostics only when needed, since logs can include call metadata.
+- Keep coturn image updated
+- Use the same shared secret between backend and coturn
+- Use a proper realm and domain
+- Restrict unnecessary open ports
+
+## User safety checklist
+
+- Share links privately
+- Do not reuse the same room link for sensitive calls
+- End and recreate links after a call
+- Prefer trusted networks
 
 ## Incident response basics
 
-- If compromise is suspected: rotate all credentials immediately.
-- Revoke compromised sessions/tokens on hosting and git providers.
-- Publish patched build and invalidate old deployment links if possible.
-- Notify users of any known exposure clearly and quickly.
+- Rotate secrets immediately if compromise is suspected
+- Revoke affected credentials/tokens
+- Redeploy patched builds and invalidate old links where possible
+- Inform users quickly with clear impact notes

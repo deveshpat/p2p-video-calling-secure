@@ -1,47 +1,49 @@
 .app-shell {
-  width: min(1120px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 1.2rem;
+  padding: 1.25rem;
   display: grid;
   gap: 1rem;
 }
 
 .hero {
-  background: linear-gradient(
-    130deg,
-    rgba(6, 102, 71, 0.92),
-    rgba(13, 143, 104, 0.88) 55%,
-    rgba(46, 158, 128, 0.82)
-  );
-  color: #ecfff8;
-  border-radius: 18px;
-  padding: 1rem 1.1rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 10px 24px rgba(7, 56, 42, 0.16);
+  background: linear-gradient(140deg, #f5f8ff 0%, #eff4ff 50%, #eef6ff 100%);
+  color: #101828;
+  border: 1px solid #d8e3f8;
+  border-radius: 22px;
+  padding: 1.3rem 1.4rem;
+  box-shadow: 0 20px 45px rgba(16, 24, 40, 0.08);
+}
+
+.meet-hero {
+  background:
+    radial-gradient(circle at 85% 20%, rgba(138, 180, 248, 0.34), transparent 45%),
+    radial-gradient(circle at 12% 10%, rgba(162, 227, 197, 0.28), transparent 36%),
+    linear-gradient(140deg, #f6f9ff 0%, #eef4ff 55%, #f7faff 100%);
 }
 
 .hero h1 {
-  margin: 0 0 0.35rem;
-  font-size: clamp(1.4rem, 4.4vw, 2.1rem);
+  margin: 0;
+  font-size: clamp(1.45rem, 3.2vw, 2.2rem);
 }
 
 .hero p {
-  margin: 0;
-  color: rgba(236, 255, 248, 0.9);
+  margin: 0.35rem 0 0;
+  color: #475467;
+  max-width: 760px;
 }
 
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: #ffffff;
+  border: 1px solid #dbe4f2;
   border-radius: 16px;
-  padding: 0.95rem;
-  box-shadow: 0 6px 20px rgba(16, 37, 30, 0.08);
-  backdrop-filter: blur(5px);
+  padding: 1rem;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.05);
 }
 
 .panel h2,
 .panel h3 {
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.55rem;
 }
 
 .grid {
@@ -55,19 +57,25 @@
 
 label {
   display: grid;
-  gap: 0.4rem;
-  font-weight: 700;
-  color: #274339;
+  gap: 0.42rem;
+  font-weight: 600;
+  color: #344054;
 }
 
 input,
 textarea {
   width: 100%;
+  border-radius: 12px;
+  border: 1px solid #cfd8e8;
+  background: #ffffff;
+  color: #101828;
   padding: 0.62rem 0.72rem;
-  border-radius: 11px;
-  border: 1px solid var(--line);
-  background: var(--surface-strong);
-  color: var(--ink);
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid #93b4ff;
+  outline-offset: 1px;
 }
 
 textarea {
@@ -77,65 +85,80 @@ textarea {
 
 .packet-textarea {
   min-height: 160px;
-  font-family: "Space Mono", ui-monospace, monospace;
-  font-size: 0.79rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.84rem;
 }
 
 button {
-  border: 1px solid #c7d8cf;
-  border-radius: 11px;
-  background: linear-gradient(180deg, #ffffff 0%, #f5faf7 100%);
-  color: #173128;
-  padding: 0.54rem 0.8rem;
+  border: 1px solid #c5d2e7;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1d2939;
+  padding: 0.55rem 0.84rem;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  font-weight: 700;
+  font-weight: 600;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
 }
 
 button:hover:enabled {
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(7, 62, 44, 0.13);
+  border-color: #8fb0f2;
+  box-shadow: 0 8px 14px rgba(29, 41, 57, 0.12);
 }
 
 button:disabled {
-  opacity: 0.55;
+  opacity: 0.58;
   cursor: not-allowed;
 }
 
 button.active {
-  border-color: var(--brand);
-  background: linear-gradient(180deg, #dcf8ec 0%, #c8f0de 100%);
-  color: #0b6245;
+  background: #e8f0ff;
+  border-color: #8fb0f2;
+  color: #1f4d9d;
 }
 
 .button-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.55rem;
   margin: 0.52rem 0;
+}
+
+.mode-switch-row {
+  margin-top: 0.85rem;
+}
+
+.mode-pill {
+  border-radius: 999px;
 }
 
 .muted {
   margin: 0.3rem 0;
-  color: var(--ink-soft);
+  color: #667085;
+}
+
+.error {
+  margin: 0.4rem 0;
+  color: #b42318;
+  font-weight: 700;
 }
 
 .video-grid video {
   width: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 12px;
-  border: 1px solid #d4dfd8;
-  background: linear-gradient(180deg, #0c1612, #1b2f28);
+  border: 1px solid #d1ddec;
+  background: #edf2fb;
 }
 
 .chat-log {
   min-height: 110px;
   max-height: 250px;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid #d6e1f0;
   border-radius: 12px;
   padding: 0.7rem;
-  background: #f9fcfa;
+  background: #f8fbff;
 }
 
 .chat-message {
@@ -145,11 +168,11 @@ button.active {
 }
 
 .chat-message.local {
-  background: #ddf5ea;
+  background: #e5f1ff;
 }
 
 .chat-message.remote {
-  background: #f3f6f5;
+  background: #ecf7ef;
 }
 
 .chat-message p {
@@ -167,18 +190,12 @@ button.active {
   display: grid;
   gap: 0.52rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  font-family: "Space Mono", ui-monospace, monospace;
-  font-size: 0.91rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.9rem;
 }
 
 .status-panel p {
   margin: 0;
-}
-
-.error {
-  margin-top: 0.42rem !important;
-  color: var(--warn);
-  font-weight: 800;
 }
 
 .qr-block {
@@ -198,12 +215,229 @@ button.active {
 
 .qr-reader-box {
   min-height: 220px;
-  border: 1px dashed #bad2c7;
+  border: 1px dashed #98afda;
   border-radius: 12px;
   padding: 0.35rem;
 }
 
-@media (max-width: 900px) {
+.quick-call-panel {
+  padding: 0.35rem;
+}
+
+.quick-call-frame {
+  width: 100%;
+  min-height: 72vh;
+  border: 1px solid #d4e0f2;
+  border-radius: 12px;
+  background: #f6f9fe;
+}
+
+.meet-home-shell {
+  display: grid;
+  justify-items: center;
+}
+
+.meet-home-card {
+  width: min(760px, 100%);
+  background: #ffffff;
+  border: 1px solid #dbe5f4;
+  border-radius: 22px;
+  padding: 1.35rem;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.08);
+}
+
+.meet-pill {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #175cd3;
+  background: #e7f0ff;
+  border-radius: 999px;
+  padding: 0.28rem 0.66rem;
+  margin: 0 0 0.4rem;
+}
+
+.meet-home-card h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.7vw, 2rem);
+}
+
+.meet-input-label {
+  margin-top: 1rem;
+}
+
+.meet-home-actions {
+  margin-top: 0.9rem;
+}
+
+.meet-primary {
+  background: linear-gradient(180deg, #2a63d6 0%, #1f52b6 100%);
+  border: 1px solid #2a63d6;
+  color: #ffffff;
+}
+
+.meet-secondary {
+  background: #f6f8fc;
+  border: 1px solid #c8d4ea;
+  color: #1d2939;
+}
+
+.meet-danger {
+  background: #d92d20;
+  border: 1px solid #d92d20;
+  color: #ffffff;
+}
+
+.meet-join-row {
+  margin-top: 0.95rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.meet-call-shell {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.meet-call-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  background: #ffffff;
+  border: 1px solid #dbe5f4;
+  border-radius: 16px;
+  padding: 0.95rem;
+}
+
+.meet-call-topbar h2 {
+  margin: 0.35rem 0 0;
+}
+
+.meet-top-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.meet-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+}
+
+.meet-stage.with-chat {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.meet-video-stage {
+  position: relative;
+  min-height: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #d3deef;
+  background: linear-gradient(180deg, #dfe9fb 0%, #e7eef8 100%);
+}
+
+.meet-remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #d8e2f4;
+}
+
+.meet-remote-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #344054;
+  text-align: center;
+  padding: 1rem;
+}
+
+.meet-local-video {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 240px;
+  max-width: 38%;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  box-shadow: 0 16px 26px rgba(15, 23, 42, 0.28);
+  object-fit: cover;
+  background: #d5e2f8;
+}
+
+.meet-chat-panel {
+  background: #ffffff;
+  border: 1px solid #dbe5f4;
+  border-radius: 16px;
+  padding: 0.8rem;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 420px;
+}
+
+.meet-chat-panel h3 {
+  margin: 0;
+}
+
+.meet-chat-log {
+  margin-top: 0.55rem;
+  border: 1px solid #d9e4f2;
+  border-radius: 12px;
+  padding: 0.65rem;
+  overflow: auto;
+  background: #f8fbff;
+}
+
+.meet-chat-line {
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  margin-bottom: 0.5rem;
+}
+
+.meet-chat-line.local {
+  background: #e9f2ff;
+}
+
+.meet-chat-line.remote {
+  background: #edf8f0;
+}
+
+.meet-chat-line p {
+  margin: 0.18rem 0 0;
+}
+
+.meet-chat-compose {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.meet-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #ffffff;
+  border: 1px solid #dbe5f4;
+  border-radius: 16px;
+  padding: 0.75rem;
+}
+
+.meet-control {
+  min-width: 110px;
+}
+
+@media (max-width: 960px) {
   .grid.two {
     grid-template-columns: 1fr;
   }
@@ -213,6 +447,39 @@ button.active {
   }
 
   .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-call-frame {
+    min-height: 62vh;
+  }
+
+  .meet-stage.with-chat {
+    grid-template-columns: 1fr;
+  }
+
+  .meet-call-topbar {
+    flex-direction: column;
+  }
+
+  .meet-top-actions {
+    justify-content: flex-start;
+  }
+
+  .meet-video-stage {
+    min-height: 320px;
+  }
+
+  .meet-local-video {
+    width: 170px;
+    max-width: 46%;
+  }
+
+  .meet-join-row {
+    grid-template-columns: 1fr;
+  }
+
+  .meet-chat-compose {
     grid-template-columns: 1fr;
   }
 }
