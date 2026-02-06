@@ -50,6 +50,9 @@ interface StatsSample {
 }
 
 type StatsLike = Record<string, unknown>;
+const MAX_DATA_CHANNEL_MESSAGE_CHARS = 16_000;
+const MAX_CHAT_CHARS = 500;
+const MIN_CHAT_INTERVAL_MS = 250;
 
 function readNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -118,6 +121,8 @@ export class WebRtcCallManager {
   private previousOutboundBytes = 0;
 
   private previousStatsTimestampMs = 0;
+
+  private lastChatSentAt = 0;
 
   private constructor({
     role,
@@ -242,17 +247,28 @@ export class WebRtcCallManager {
   }
 
   sendChatMessage(text: string): ChatMessage {
+    const now = Date.now();
+    if (now - this.lastChatSentAt < MIN_CHAT_INTERVAL_MS) {
+      throw new Error("Please wait a moment before sending another message.");
+    }
+
+    const cleanText = this.sanitizeChatText(text);
+    if (!cleanText) {
+      throw new Error("Message is empty after security filtering.");
+    }
+
     const payload = {
       id: randomId(),
-      text,
-      timestamp: Date.now(),
+      text: cleanText,
+      timestamp: now,
     };
+    this.lastChatSentAt = now;
     this.sendDataMessage("chat", payload);
 
     const localMessage: ChatMessage = {
       id: payload.id,
       from: "local",
-      text,
+      text: cleanText,
       timestamp: payload.timestamp,
     };
     this.callbacks.onChatMessage?.(localMessage);
@@ -372,6 +388,13 @@ export class WebRtcCallManager {
 
   private bindChatChannel(channel: RTCDataChannel): void {
     channel.onmessage = (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+      if (event.data.length > MAX_DATA_CHANNEL_MESSAGE_CHARS) {
+        return;
+      }
+
       const decoded = safeJsonParse(event.data);
       if (
         !decoded ||
@@ -389,10 +412,14 @@ export class WebRtcCallManager {
           text: string;
           timestamp: number;
         };
+        const cleanText = this.sanitizeChatText(payload.text);
+        if (!cleanText) {
+          return;
+        }
         this.callbacks.onChatMessage?.({
           id: payload.id,
           from: "remote",
-          text: payload.text,
+          text: cleanText,
           timestamp: payload.timestamp,
         });
         return;
@@ -403,13 +430,31 @@ export class WebRtcCallManager {
         typeof message.payload === "object" &&
         message.payload
       ) {
-        this.callbacks.onRemoteMediaState?.(message.payload as ControlPayload);
+        const payload = message.payload as Partial<ControlPayload>;
+        if (
+          typeof payload.audioEnabled === "boolean" &&
+          typeof payload.videoEnabled === "boolean" &&
+          typeof payload.timestamp === "number"
+        ) {
+          this.callbacks.onRemoteMediaState?.({
+            audioEnabled: payload.audioEnabled,
+            videoEnabled: payload.videoEnabled,
+            timestamp: payload.timestamp,
+          });
+        }
       }
     };
   }
 
   private bindDiagChannel(channel: RTCDataChannel): void {
     channel.onmessage = (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+      if (event.data.length > MAX_DATA_CHANNEL_MESSAGE_CHARS) {
+        return;
+      }
+
       const decoded = safeJsonParse(event.data);
       if (
         !decoded ||
@@ -422,8 +467,10 @@ export class WebRtcCallManager {
 
       const message = decoded as DataMessage;
       if (message.type === "diag" && typeof message.payload === "object" && message.payload) {
-        const diagEvent = message.payload as DiagEventV1;
-        this.diagnosticsLog.addRemoteEvent(diagEvent);
+        const diagEvent = this.safeDiagEvent(message.payload);
+        if (diagEvent) {
+          this.diagnosticsLog.addRemoteEvent(diagEvent);
+        }
       }
     };
   }
@@ -442,7 +489,66 @@ export class WebRtcCallManager {
       return;
     }
 
-    channel.send(JSON.stringify({ type, payload } satisfies DataMessage));
+    const serialized = JSON.stringify({ type, payload } satisfies DataMessage);
+    if (serialized.length > MAX_DATA_CHANNEL_MESSAGE_CHARS) {
+      return;
+    }
+    channel.send(serialized);
+  }
+
+  private sanitizeChatText(input: string): string {
+    const cleaned = input
+      .replace(/[\p{Cc}]/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
+    return cleaned.slice(0, MAX_CHAT_CHARS);
+  }
+
+  private safeDiagEvent(payload: unknown): DiagEventV1 | null {
+    const event = payload as Partial<DiagEventV1>;
+    if (typeof event !== "object" || event === null) {
+      return null;
+    }
+
+    if (
+      typeof event.timestamp !== "number" ||
+      typeof event.peerId !== "string" ||
+      typeof event.rttMs !== "number" ||
+      typeof event.jitterMs !== "number" ||
+      typeof event.packetLossPct !== "number" ||
+      typeof event.bitrateKbps !== "number" ||
+      typeof event.frameWidth !== "number" ||
+      typeof event.frameHeight !== "number" ||
+      typeof event.fps !== "number" ||
+      typeof event.audioLevel !== "number" ||
+      typeof event.eventType !== "string" ||
+      typeof event.message !== "string"
+    ) {
+      return null;
+    }
+
+    if (
+      event.peerId.length > 32 ||
+      event.eventType.length > 64 ||
+      event.message.length > 512
+    ) {
+      return null;
+    }
+
+    return {
+      timestamp: event.timestamp,
+      peerId: event.peerId,
+      rttMs: event.rttMs,
+      jitterMs: event.jitterMs,
+      packetLossPct: event.packetLossPct,
+      bitrateKbps: event.bitrateKbps,
+      frameWidth: event.frameWidth,
+      frameHeight: event.frameHeight,
+      fps: event.fps,
+      audioLevel: event.audioLevel,
+      eventType: event.eventType,
+      message: event.message,
+    };
   }
 
   private startStatsLoop(): void {

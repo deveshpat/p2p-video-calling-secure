@@ -2,7 +2,7 @@ import { base64ToBytes, bytesToBase64 } from "./base64";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 600_000;
 const KEY_LENGTH_BITS = 256;
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -13,6 +13,18 @@ export interface EncryptedBlob {
   saltB64: string;
   ivB64: string;
   ciphertextB64: string;
+}
+
+function buildAesGcmParams(iv: Uint8Array, additionalData?: string): AesGcmParams {
+  if (!additionalData) {
+    return { name: "AES-GCM", iv: toArrayBuffer(iv) };
+  }
+
+  return {
+    name: "AES-GCM",
+    iv: toArrayBuffer(iv),
+    additionalData: toArrayBuffer(textEncoder.encode(additionalData)),
+  };
 }
 
 function ensureWebCrypto(): Crypto {
@@ -54,6 +66,7 @@ export async function encryptJsonPayload(
   payload: unknown,
   passphrase: string,
   roomCode: string,
+  additionalData?: string,
 ): Promise<EncryptedBlob> {
   const cryptoProvider = ensureWebCrypto();
   const salt = cryptoProvider.getRandomValues(new Uint8Array(16));
@@ -61,7 +74,7 @@ export async function encryptJsonPayload(
   const key = await deriveAesKey(passphrase, roomCode, salt);
   const plaintext = textEncoder.encode(JSON.stringify(payload));
   const ciphertextBuffer = await cryptoProvider.subtle.encrypt(
-    { name: "AES-GCM", iv: toArrayBuffer(iv) },
+    buildAesGcmParams(iv, additionalData),
     key,
     toArrayBuffer(plaintext),
   );
@@ -77,6 +90,7 @@ export async function decryptJsonPayload<T>(
   encryptedBlob: EncryptedBlob,
   passphrase: string,
   roomCode: string,
+  additionalData?: string,
 ): Promise<T> {
   const cryptoProvider = ensureWebCrypto();
   const salt = base64ToBytes(encryptedBlob.saltB64);
@@ -87,7 +101,7 @@ export async function decryptJsonPayload<T>(
   let plaintextBuffer: ArrayBuffer;
   try {
     plaintextBuffer = await cryptoProvider.subtle.decrypt(
-      { name: "AES-GCM", iv: toArrayBuffer(iv) },
+      buildAesGcmParams(iv, additionalData),
       key,
       toArrayBuffer(ciphertext),
     );

@@ -29,4 +29,17 @@ describe("signalCrypto", () => {
       decryptJsonPayload(encrypted, "wrong-pass", "room-a"),
     ).rejects.toThrow("DECRYPTION_FAILED");
   });
+
+  it("throws when additional authenticated data is changed", async () => {
+    const encrypted = await encryptJsonPayload(
+      { key: "value" },
+      "correct-pass",
+      "room-a",
+      "aad:v1",
+    );
+
+    await expect(
+      decryptJsonPayload(encrypted, "correct-pass", "room-a", "aad:v2"),
+    ).rejects.toThrow("DECRYPTION_FAILED");
+  });
 });

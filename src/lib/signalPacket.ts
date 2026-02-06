@@ -16,13 +16,35 @@ export const SIGNAL_VERSION = "1";
 export const TRANSPORT_CHUNK_CHAR_LIMIT = 900;
 const PACKET_PREFIX = "P2PV1";
 const PACKET_TTL_MS = 10 * 60 * 1000;
+const MAX_PACKET_TEXT_CHARS = 200_000;
+const MAX_CHUNK_COUNT = 256;
+const MAX_COMPRESSED_BYTES = 120_000;
+const MAX_DECOMPRESSED_CHARS = 350_000;
+
+const roomCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-zA-Z0-9_-]{4,48}$/u, "Room code must be 4-48 letters, numbers, - or _.");
+
+const sessionIdSchema = z
+  .string()
+  .min(6)
+  .max(128)
+  .regex(/^[a-zA-Z0-9-]+$/u);
+
+const iceCandidateSchema = z.object({
+  candidate: z.string().min(1).max(2048),
+  sdpMid: z.string().max(64).nullable().optional(),
+  sdpMLineIndex: z.number().int().min(0).max(10).optional(),
+  usernameFragment: z.string().max(256).optional(),
+});
 
 const signalEnvelopeSchema = z.object({
   version: z.literal(SIGNAL_VERSION),
   type: z.union([z.literal("offer"), z.literal("answer")]),
-  roomCode: z.string().min(1),
-  createdAt: z.number().int(),
-  expiresAt: z.number().int(),
+  roomCode: roomCodeSchema,
+  createdAt: z.number().int().positive(),
+  expiresAt: z.number().int().positive(),
   saltB64: z.string().min(10),
   ivB64: z.string().min(10),
   ciphertextB64: z.string().min(10),
@@ -30,20 +52,48 @@ const signalEnvelopeSchema = z.object({
 });
 
 const offerPayloadSchema = z.object({
-  sessionId: z.string().min(6),
-  sdpOffer: z.string().min(10),
-  iceCandidates: z.array(z.custom<RTCIceCandidateInit>()),
+  sessionId: sessionIdSchema,
+  sdpOffer: z.string().min(10).max(30_000),
+  iceCandidates: z.array(iceCandidateSchema).max(96),
   mediaTarget: z.literal("1080p30"),
-  clientInfo: z.string().min(2),
+  clientInfo: z.string().min(2).max(180),
 });
 
 const answerPayloadSchema = z.object({
-  sessionId: z.string().min(6),
-  sdpAnswer: z.string().min(10),
-  iceCandidates: z.array(z.custom<RTCIceCandidateInit>()),
+  sessionId: sessionIdSchema,
+  sdpAnswer: z.string().min(10).max(30_000),
+  iceCandidates: z.array(iceCandidateSchema).max(96),
   acceptedMediaTarget: z.literal("1080p30"),
-  clientInfo: z.string().min(2),
+  clientInfo: z.string().min(2).max(180),
 });
+
+function buildEnvelopeAdditionalData(envelope: {
+  version: SignalEnvelopeV1["version"];
+  type: SignalEnvelopeV1["type"];
+  roomCode: string;
+  createdAt: number;
+  expiresAt: number;
+  senderRole: SignalEnvelopeV1["senderRole"];
+}): string {
+  return [
+    envelope.version,
+    envelope.type,
+    envelope.roomCode,
+    String(envelope.createdAt),
+    String(envelope.expiresAt),
+    envelope.senderRole,
+  ].join("|");
+}
+
+function validateEnvelopeTimeWindow(envelope: SignalEnvelopeV1): void {
+  if (envelope.expiresAt <= envelope.createdAt) {
+    throw new Error("Packet timestamps are invalid.");
+  }
+
+  if (envelope.expiresAt - envelope.createdAt > PACKET_TTL_MS) {
+    throw new Error("Packet lifetime is invalid.");
+  }
+}
 
 function getTransportLines(input: string): string[] {
   return input
@@ -59,6 +109,10 @@ function parseChunkLine(line: string): TransportChunk {
   }
 
   const packetId = parts[1];
+  if (!/^[a-f0-9]{16}$/u.test(packetId)) {
+    throw new Error("Packet ID is invalid.");
+  }
+
   const partTokens = parts[2].split("/");
   if (partTokens.length !== 2) {
     throw new Error("Invalid packet chunk index.");
@@ -94,10 +148,19 @@ function randomPacketId(): string {
 }
 
 function splitPayloadIntoChunks(payload: string): string[] {
+  if (payload.length > MAX_PACKET_TEXT_CHARS) {
+    throw new Error("Packet is too large to share safely.");
+  }
+
   const chunks: string[] = [];
   for (let index = 0; index < payload.length; index += TRANSPORT_CHUNK_CHAR_LIMIT) {
     chunks.push(payload.slice(index, index + TRANSPORT_CHUNK_CHAR_LIMIT));
   }
+
+  if (chunks.length > MAX_CHUNK_COUNT) {
+    throw new Error("Packet has too many chunks.");
+  }
+
   return chunks;
 }
 
@@ -139,18 +202,28 @@ export async function createSignalEnvelope<TPayload>({
   type: SignalEnvelopeType;
   senderRole: SenderRole;
 }): Promise<SignalEnvelopeV1> {
-  const encrypted = await encryptJsonPayload(payload, passphrase, roomCode);
+  const cleanRoomCode = roomCodeSchema.parse(roomCode);
   const now = Date.now();
-  return {
+  const envelopeMeta = {
     version: SIGNAL_VERSION,
     type,
-    roomCode,
+    roomCode: cleanRoomCode,
     createdAt: now,
     expiresAt: now + PACKET_TTL_MS,
+    senderRole,
+  } as const;
+  const encrypted = await encryptJsonPayload(
+    payload,
+    passphrase,
+    cleanRoomCode,
+    buildEnvelopeAdditionalData(envelopeMeta),
+  );
+
+  return {
+    ...envelopeMeta,
     saltB64: encrypted.saltB64,
     ivB64: encrypted.ivB64,
     ciphertextB64: encrypted.ciphertextB64,
-    senderRole,
   };
 }
 
@@ -178,9 +251,16 @@ export function getTransportChunksFromText(input: string): string[] {
 }
 
 export function decodeEnvelopeFromTransport(input: string): SignalEnvelopeV1 {
+  if (input.length > MAX_PACKET_TEXT_CHARS) {
+    throw new Error("Packet text is too large.");
+  }
+
   const lines = getTransportLines(input);
   if (lines.length === 0) {
     throw new Error("No packet data was found.");
+  }
+  if (lines.length > MAX_CHUNK_COUNT) {
+    throw new Error("Packet has too many chunks.");
   }
 
   const chunks = lines.map(parseChunkLine);
@@ -203,20 +283,36 @@ export function decodeEnvelopeFromTransport(input: string): SignalEnvelopeV1 {
     (first, second) => first.partIndex - second.partIndex,
   );
   const payload = ordered.map((chunk) => chunk.payload).join("");
-  const decompressed = ungzip(base64UrlToBytes(payload));
+  const compressedBytes = base64UrlToBytes(payload);
+  if (compressedBytes.length > MAX_COMPRESSED_BYTES) {
+    throw new Error("Packet payload is too large.");
+  }
+
+  const decompressed = ungzip(compressedBytes);
+  if (decompressed.length > MAX_DECOMPRESSED_CHARS) {
+    throw new Error("Packet decompressed payload is too large.");
+  }
+
   const json = new TextDecoder().decode(decompressed);
   const parsed = JSON.parse(json) as unknown;
-  return signalEnvelopeSchema.parse(parsed);
+  const envelope = signalEnvelopeSchema.parse(parsed);
+  validateEnvelopeTimeWindow(envelope);
+  return envelope;
 }
 
-function ensureEnvelopeUsable(envelope: SignalEnvelopeV1, roomCode: string): void {
-  if (envelope.roomCode !== roomCode) {
+function ensureEnvelopeUsable(envelope: SignalEnvelopeV1, roomCode: string): string {
+  const cleanRoomCode = roomCodeSchema.parse(roomCode);
+  if (envelope.roomCode !== cleanRoomCode) {
     throw new Error("This packet does not belong to this room code.");
   }
+
+  validateEnvelopeTimeWindow(envelope);
 
   if (Date.now() > envelope.expiresAt) {
     throw new Error("PACKET_EXPIRED");
   }
+
+  return cleanRoomCode;
 }
 
 export async function decryptOfferEnvelope({
@@ -228,12 +324,20 @@ export async function decryptOfferEnvelope({
   roomCode: string;
   passphrase: string;
 }): Promise<OfferPayloadV1> {
-  ensureEnvelopeUsable(envelope, roomCode);
+  const cleanRoomCode = ensureEnvelopeUsable(envelope, roomCode);
   if (envelope.type !== "offer") {
     throw new Error("Expected an offer packet.");
   }
+  if (envelope.senderRole !== "host") {
+    throw new Error("Offer packet role is invalid.");
+  }
 
-  const payload = await decryptJsonPayload<unknown>(envelope, passphrase, roomCode);
+  const payload = await decryptJsonPayload<unknown>(
+    envelope,
+    passphrase,
+    cleanRoomCode,
+    buildEnvelopeAdditionalData(envelope),
+  );
   return offerPayloadSchema.parse(payload);
 }
 
@@ -246,11 +350,19 @@ export async function decryptAnswerEnvelope({
   roomCode: string;
   passphrase: string;
 }): Promise<AnswerPayloadV1> {
-  ensureEnvelopeUsable(envelope, roomCode);
+  const cleanRoomCode = ensureEnvelopeUsable(envelope, roomCode);
   if (envelope.type !== "answer") {
     throw new Error("Expected an answer packet.");
   }
+  if (envelope.senderRole !== "joiner") {
+    throw new Error("Answer packet role is invalid.");
+  }
 
-  const payload = await decryptJsonPayload<unknown>(envelope, passphrase, roomCode);
+  const payload = await decryptJsonPayload<unknown>(
+    envelope,
+    passphrase,
+    cleanRoomCode,
+    buildEnvelopeAdditionalData(envelope),
+  );
   return answerPayloadSchema.parse(payload);
 }

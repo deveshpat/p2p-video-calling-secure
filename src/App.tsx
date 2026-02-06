@@ -39,6 +39,13 @@ const emptyRemoteState: RemoteMediaState = {
   timestamp: 0,
 };
 
+const ROOM_CODE_PATTERN = /^[a-zA-Z0-9_-]{4,48}$/u;
+const MIN_PASSPHRASE_LENGTH = 14;
+const MAX_PACKET_INPUT_CHARS = 200_000;
+const MAX_DECRYPT_FAILS = 5;
+const DECRYPT_COOLDOWN_MS = 60_000;
+const MAX_CHAT_INPUT_CHARS = 500;
+
 function appendChunk(existingText: string, chunk: string): string {
   const trimmed = chunk.trim();
   if (!trimmed) {
@@ -71,6 +78,44 @@ function friendlyMediaError(error: unknown): AppError {
     code: "UNKNOWN",
     message: error instanceof Error ? error.message : "Unknown error.",
   };
+}
+
+function validateCredentials(roomCode: string, passphrase: string): AppError | null {
+  if (!roomCode.trim() || !passphrase.trim()) {
+    return {
+      code: "MISSING_CREDENTIALS",
+      message: "Room code and passphrase are both required.",
+    };
+  }
+
+  const cleanRoomCode = roomCode.trim();
+  if (!ROOM_CODE_PATTERN.test(cleanRoomCode)) {
+    return {
+      code: "ROOM_CODE_INVALID",
+      message: "Room code must be 4-48 characters using letters, numbers, - or _.",
+    };
+  }
+
+  const cleanPassphrase = passphrase.trim();
+  const hasUpper = /[A-Z]/u.test(cleanPassphrase);
+  const hasLower = /[a-z]/u.test(cleanPassphrase);
+  const hasNumber = /[0-9]/u.test(cleanPassphrase);
+  const hasSymbol = /[^A-Za-z0-9]/u.test(cleanPassphrase);
+  if (
+    cleanPassphrase.length < MIN_PASSPHRASE_LENGTH ||
+    !hasUpper ||
+    !hasLower ||
+    !hasNumber ||
+    !hasSymbol
+  ) {
+    return {
+      code: "PASSPHRASE_WEAK",
+      message:
+        "Passphrase must be at least 14 characters and include uppercase, lowercase, number, and symbol.",
+    };
+  }
+
+  return null;
 }
 
 function formatState(state: RTCPeerConnectionState): string {
@@ -117,6 +162,8 @@ function App(): JSX.Element {
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [manager, setManager] = useState<WebRtcCallManager | null>(null);
+  const [decryptFailureCount, setDecryptFailureCount] = useState(0);
+  const [decryptCooldownUntil, setDecryptCooldownUntil] = useState(0);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -192,14 +239,44 @@ function App(): JSX.Element {
   });
 
   const ensureRoomAndPassphrase = (): boolean => {
-    if (!roomCode.trim() || !passphrase.trim()) {
+    const validationError = validateCredentials(roomCode, passphrase);
+    if (validationError) {
+      setErrorState(validationError);
+      return false;
+    }
+    return true;
+  };
+
+  const checkDecryptCooldown = (): boolean => {
+    if (Date.now() < decryptCooldownUntil) {
+      const remainingSeconds = Math.ceil((decryptCooldownUntil - Date.now()) / 1000);
       setErrorState({
-        code: "MISSING_CREDENTIALS",
-        message: "Room code and passphrase are both required.",
+        code: "SECURITY_COOLDOWN",
+        message: `Too many failed packet unlock attempts. Wait ${remainingSeconds}s and try again.`,
       });
       return false;
     }
     return true;
+  };
+
+  const resetDecryptProtection = () => {
+    setDecryptFailureCount(0);
+    setDecryptCooldownUntil(0);
+  };
+
+  const recordDecryptFailure = (code: string) => {
+    if (code !== CallFailureCode.PASS_PHRASE_MISMATCH) {
+      return;
+    }
+
+    setDecryptFailureCount((currentCount) => {
+      const nextCount = currentCount + 1;
+      if (nextCount >= MAX_DECRYPT_FAILS) {
+        setDecryptCooldownUntil(Date.now() + DECRYPT_COOLDOWN_MS);
+        return 0;
+      }
+      return nextCount;
+    });
   };
 
   const ensureLocalStream = async (): Promise<MediaStream> => {
@@ -262,10 +339,18 @@ function App(): JSX.Element {
   };
 
   const handleJoinAndCreateAnswer = async () => {
-    if (!ensureRoomAndPassphrase()) {
+    if (!ensureRoomAndPassphrase() || !checkDecryptCooldown()) {
       return;
     }
     const inboundPacketText = joinPacketInput;
+    if (inboundPacketText.length > MAX_PACKET_INPUT_CHARS) {
+      setErrorState({
+        code: "PACKET_TOO_LARGE",
+        message: "Packet input is too large and was blocked for safety.",
+      });
+      return;
+    }
+
     setBusy(true);
     setErrorState(null);
     setStatusText("Reading host packet and creating answer...");
@@ -293,9 +378,12 @@ function App(): JSX.Element {
       });
       const encodedAnswer = encodeEnvelopeForTransport(answerEnvelope);
       setAnswerPacketText(encodedAnswer);
+      setJoinPacketInput("");
+      resetDecryptProtection();
       setStatusText("Answer packet is ready. Share it back to the host.");
     } catch (error) {
       const failure = describeFailure(error);
+      recordDecryptFailure(failure.code);
       setErrorState({
         code: failure.code,
         message: failure.message,
@@ -314,6 +402,16 @@ function App(): JSX.Element {
       });
       return;
     }
+    if (!checkDecryptCooldown()) {
+      return;
+    }
+    if (answerPacketInput.length > MAX_PACKET_INPUT_CHARS) {
+      setErrorState({
+        code: "PACKET_TOO_LARGE",
+        message: "Packet input is too large and was blocked for safety.",
+      });
+      return;
+    }
 
     setBusy(true);
     setErrorState(null);
@@ -326,9 +424,12 @@ function App(): JSX.Element {
         passphrase: passphrase.trim(),
       });
       await manager.applyAnswer(answerPayload);
+      setAnswerPacketInput("");
+      resetDecryptProtection();
       setStatusText("Answer accepted. Waiting for peer connection...");
     } catch (error) {
       const failure = describeFailure(error);
+      recordDecryptFailure(failure.code);
       setErrorState({
         code: failure.code,
         message: failure.message,
@@ -344,8 +445,15 @@ function App(): JSX.Element {
     if (!manager || !chatInput.trim()) {
       return;
     }
-    manager.sendChatMessage(chatInput.trim());
-    setChatInput("");
+    try {
+      manager.sendChatMessage(chatInput.trim());
+      setChatInput("");
+    } catch (error) {
+      setErrorState({
+        code: "CHAT_BLOCKED",
+        message: error instanceof Error ? error.message : "Chat message was blocked.",
+      });
+    }
   };
 
   const toggleMicrophone = () => {
@@ -553,7 +661,7 @@ function App(): JSX.Element {
         <form onSubmit={onSubmitChat} className="chat-form">
           <input
             value={chatInput}
-            onChange={(event) => setChatInput(event.target.value)}
+            onChange={(event) => setChatInput(event.target.value.slice(0, MAX_CHAT_INPUT_CHARS))}
             placeholder="Type a message..."
           />
           <button type="submit" disabled={!manager || !chatInput.trim()}>
@@ -583,6 +691,11 @@ function App(): JSX.Element {
 
       <section className="panel status-panel">
         <p>{statusText}</p>
+        {decryptFailureCount > 0 ? (
+          <p className="muted">
+            Failed unlock attempts: {decryptFailureCount} / {MAX_DECRYPT_FAILS}
+          </p>
+        ) : null}
         {errorState ? (
           <p className="error">
             [{errorState.code}] {errorState.message}

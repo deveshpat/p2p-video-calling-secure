@@ -43,6 +43,11 @@ npm run test:integration
 npm run test:acceptance
 ```
 
+## Security
+
+- Read `SECURITY.md` for hardening details and operational checklist.
+- This build applies strict packet validation, encrypted packet integrity binding, brute-force cooldown, and browser security policies.
+
 ## Deployment
 
 - GitHub Pages auto-deploy is configured in `.github/workflows/deploy-pages.yml`.

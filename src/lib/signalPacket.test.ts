@@ -70,4 +70,43 @@ describe("signalPacket", () => {
       }),
     ).rejects.toThrow("PACKET_EXPIRED");
   });
+
+  it("rejects metadata tampering through integrity binding", async () => {
+    const envelope = await createSignalEnvelope({
+      payload: {
+        sessionId: "session-123",
+        sdpOffer: "v=0\r\n",
+        iceCandidates: [],
+        mediaTarget: "1080p30" as const,
+        clientInfo: "test-client",
+      },
+      passphrase: "pass-one",
+      roomCode: "room-1",
+      type: "offer",
+      senderRole: "host",
+    });
+
+    const tamperedEnvelope = {
+      ...envelope,
+      createdAt: envelope.createdAt + 1,
+      expiresAt: envelope.expiresAt + 1,
+    };
+    const decodedEnvelope = decodeEnvelopeFromTransport(
+      encodeEnvelopeForTransport(tamperedEnvelope),
+    );
+
+    await expect(
+      decryptOfferEnvelope({
+        envelope: decodedEnvelope,
+        roomCode: "room-1",
+        passphrase: "pass-one",
+      }),
+    ).rejects.toThrow("DECRYPTION_FAILED");
+  });
+
+  it("rejects extremely large packet text", () => {
+    expect(() => decodeEnvelopeFromTransport("x".repeat(200_001))).toThrow(
+      "Packet text is too large.",
+    );
+  });
 });
