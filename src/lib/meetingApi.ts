@@ -54,8 +54,18 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `Request failed (${response.status}).`;
 }
 
+async function sendRequest(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(
+      "Cannot reach the call server right now. Please try again in a moment.",
+    );
+  }
+}
+
 export async function createRoom(baseUrl: string): Promise<RoomCreateResponse> {
-  const response = await fetch(buildRequestUrl(baseUrl, "/v1/rooms"), {
+  const response = await sendRequest(buildRequestUrl(baseUrl, "/v1/rooms"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -74,7 +84,7 @@ export async function getRoomStatus(
   baseUrl: string,
   roomId: string,
 ): Promise<RoomStatusResponse> {
-  const response = await fetch(
+  const response = await sendRequest(
     buildRequestUrl(baseUrl, `/v1/rooms/${encodeURIComponent(roomId)}`),
   );
 
@@ -89,7 +99,7 @@ export async function getTurnCredentials(
   baseUrl: string,
   peerId: string,
 ): Promise<TurnCredentialsResponse> {
-  const response = await fetch(buildRequestUrl(baseUrl, "/v1/turn-credentials"), {
+  const response = await sendRequest(buildRequestUrl(baseUrl, "/v1/turn-credentials"), {
     method: "POST",
     headers: {
       "content-type": "application/json",
